@@ -8,6 +8,9 @@ import model
 import anchors
 import generate_data_sequence
 
+# TEST
+
+
 # init model, init data, lance train / test / pred / visu
 
 GROUND_TRUTH_BBOX_PATH = "./bbox_galbe_2.csv"
