@@ -167,23 +167,27 @@ parametrise la prediction, avec anchors de base
 ( on normalise que les pred selectionnees avec positive_index)
 et on return que ceux qui vont servir au loss
 
-predictions (7562,44)
+predictions (n,4)
+pred pareil
 
 """
-def parametrize_prediction(anchors,positive_index, predictions):
+def parametrize_prediction(target_anchors, predictions):
 
-    predictions = predictions.reshape((predictions.shape[0], -1, 4))
+    """    predictions = predictions.reshape((predictions.shape[0], -1, 4))
     #shape comme anchors  : (7562,11,4)
 
     selected_predictions = predictions[positive_index]  #shape (n pos, 4)
     selected_anchors = anchors[positive_index]          #shape (n pos, 4)
+    """
 
-    selected_predictions[:,0] = (selected_predictions[:,0] - selected_anchors[:,0])/selected_anchors[:,3]
-    selected_predictions[:,1] = (selected_predictions[:,1] - selected_anchors[:,1])/selected_anchors[:,2]
-    selected_predictions[:,2] = np.log10(selected_predictions[:,2]/selected_anchors[:,2])
-    selected_predictions[:,3] = np.log10(selected_predictions[:,3]/selected_anchors[:,3])
+    x = (predictions[:,0] - target_anchors[:,0])/target_anchors[:,3]
+    y = (predictions[:,1] - target_anchors[:,1])/target_anchors[:,2]
+    h = tf.math.log(predictions[:,2]/target_anchors[:,2]) / tf.math.log(10.0)
+    w = tf.math.log(predictions[:,3]/target_anchors[:,3]) / tf.math.log(10.0)
 
-    return selected_predictions
+    normalized_predictions = tf.stack([x,y,h,w],axis=1)
+
+    return normalized_predictions
 
 def UN_parametrize_predicition(anchors, positive_index, norm_predictions):
 

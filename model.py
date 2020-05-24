@@ -8,13 +8,21 @@ import anchors
 # r_x =
 
 class Model_creator():
-    def __init__(self, input_shape, anchor_array_shape,learning_rate,base_model_name, batch_size):
+    def __init__(self, input_shape, anchor_array,learning_rate,
+        base_model_name, batch_size):
+
         self.input_shape = input_shape
-        self.anchor_array_shape = anchor_array_shape
+
+        self.anchor_array = tf.convert_to_tensor(anchor_array,dtype=tf.float32)
+        self.anchor_array_shape = anchor_array.shape
+
         self.nb_anchors = self.anchor_array_shape[1]
+
         self.learning_rate = learning_rate
+
         self.base_model_name = base_model_name
         self.batch_size = batch_size
+
 
     def base_model(self):
             model_input = tf.keras.Input(shape=self.input_shape)
@@ -41,11 +49,11 @@ class Model_creator():
 
         base_model = tf.keras.models.load_model(self.base_model_name,compile=False)
         base_model.trainable = False
-        
+
         model_input = base_model.input
 
         x = base_model.layers[-9].output
-        
+
         x = tf.keras.layers.Conv2D(512,(3,3),activation="relu",padding="SAME",strides=(1,1),name="conv2d_rpn")(x)
 
         cls = tf.keras.layers.Conv2D(self.nb_anchors,(1,1),activation="sigmoid",padding="SAME",strides=(1,1),name="cls_conv")(x)
@@ -107,11 +115,13 @@ class Model_creator():
 
         labels = tf.reshape(reg_true[reg_true != 0], (-1,4))
         pred = tf.reshape(reg_pred[reg_true!=0],(-1,4))
-        
-        pred2 = anchors.parametrize_prediction(pred, labels)
+
+        un_normalized_target_anchors = tf.reshape(self.anchor_array[reg_true[0] != 0], (-1,4))
+
+        normalized_pred = anchors.parametrize_prediction(un_normalized_target_anchors, pred)
 
 
-        dif = tf.abs(pred - labels)
+        dif = tf.abs(normalized_pred - labels)
         a = dif[dif < 1]
         a = tf.reduce_sum(tf.square(a))*0.5
 

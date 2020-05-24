@@ -8,7 +8,7 @@ import model
 import anchors
 import generate_data_sequence
 
-# TEST
+# COMIT
 
 
 # init model, init data, lance train / test / pred / visu
@@ -18,8 +18,8 @@ DATA_PATH = "/home/lucien/Documents/ST09/stage_utt/implem/check_img_mask/img/"
 #DATA_PATH = "/home/cogrannr/roues/MEFRO/grises/img_galbe_avec_defauts"
 
 
-IMAGE_SHAPE = (2790,99)  # Images resize en taille ~ moyenne : moyenne pondérée
-INPUT_IMAGE_SHAPE = (99,2790,1) # shape qui rentre dans le cnn
+IMAGE_SHAPE = (2792,99)  # Images resize en taille ~ moyenne : moyenne pondérée
+INPUT_IMAGE_SHAPE = (99,2792,1) # shape qui rentre dans le cnn
 # même taille pour toutes les parties d'images, présentes en même densité
 
 RATIO_X = 4
@@ -55,18 +55,12 @@ print(anchors_array.shape)
 train_dataset = generate_data_sequence.Dataset_sequence("train",DATA_SIZE, IMAGE_SHAPE,ANCHOR_BATCH_SIZE,
     ratio_batch, DATA_PATH, GROUND_TRUTH_BBOX_PATH, anchors_array)
 
-
-for (x,y) in train_dataset:
-    break
-
-model_creator = model.Model_creator(INPUT_IMAGE_SHAPE,anchors_array.shape,LEARNING_RATE)
+model_creator = model.Model_creator(INPUT_IMAGE_SHAPE,anchors_array,LEARNING_RATE,"base_model_galbe.h5",BATCH_SIZE)
 rpn = model_creator.init_RPN_model()
 
 rpn.summary()
 
-rpn(x)
-
-rpn.fit(train_dataset)
+rpn.fit(train_dataset,epochs=NUM_EPOCHS)
 
 """
 valid_dataset = generate_data_sequence.Dataset_sequence("valid",DATA_SIZE, IMAGE_SHAPE,ANCHOR_BATCH_SIZE,
