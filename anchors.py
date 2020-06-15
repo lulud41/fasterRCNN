@@ -60,10 +60,11 @@ def draw_bounding_box(PIL_image, bbox, color="black"):
     rect.rectangle([x,y,w,h],outline=color,width=1)
     return PIL_image
 
-def draw_anchors(image_name,anchor_list, color="black"):
+def draw_anchors(image_name,anchor_list, image_shape, color="black"):
     # anchor_list (shape ( n,4))
     # anchor peut etre 0 donc pas dessiné, ou != 0
     PIL_image = PIL.Image.open(image_name)
+    PIL_image = PIL_image.resize(image_shape)
 
     for anchor in anchor_list:
         PIL_image = draw_bounding_box(PIL_image,anchor, color)
@@ -87,7 +88,7 @@ def get_bbox_from_mask(img_name):
 
     return [bbox_x, bbox_y, bbox_h, bbox_w]
 
-def compute_IoU(anchors, ground_truth_bbox,positive_threshold=0.55, negative_threshold=0.3):
+def compute_IoU(anchors, ground_truth_bbox,positive_threshold=0.6, negative_threshold=0.3):
     # anchors : liste d'anchor généres (7562,11,4)
     # ground truth box : mask [x,y,h,w]
     y = (anchors[:,:,3]+ground_truth_bbox[3])/2 - np.abs(anchors[:,:,1] - ground_truth_bbox[1])
@@ -127,16 +128,14 @@ return positves anchors, normalisés : juste les anchors qui servent
 de label (num_positives, 4)
 
 """
-def parametrize_anchors(anchors,positive_index, ground_truth_bbox):
+def parametrize_anchors(anchors, ground_truth_bbox, means, std):
 
     #parametrized_anchors = np.zeros(anchors.shape)
 
-    positive_anchors = anchors[positive_index] # liste des anchors pos
-
-    positive_anchors[:,0] = (ground_truth_bbox[0] - positive_anchors[:,0] + epsilon)/positive_anchors[:,3]
-    positive_anchors[:,1] = (ground_truth_bbox[1] - positive_anchors[:,1] + epsilon)/positive_anchors[:,2]
-    positive_anchors[:,2] = np.log10(ground_truth_bbox[2]/positive_anchors[:,2] + epsilon)
-    positive_anchors[:,3] = np.log10(ground_truth_bbox[3]/positive_anchors[:,3] + epsilon)
+    anchors[:,0] = (ground_truth_bbox[0] - anchors[:,0] + epsilon)/anchors[:,3]
+    anchors[:,1] = (ground_truth_bbox[1] - anchors[:,1] + epsilon)/anchors[:,2]
+    anchors[:,2] = np.log(ground_truth_bbox[2]/anchors[:,2] + epsilon)
+    anchors[:,3] = np.log(ground_truth_bbox[3]/anchors[:,3] + epsilon)
 
     #parametrized_anchors[positive_index] = positive_anchors
 
@@ -144,20 +143,47 @@ def parametrize_anchors(anchors,positive_index, ground_truth_bbox):
     #parametrized_anchors = parametrized_anchors.reshape(( parametrized_anchors.shape[0],
     #    parametrized_anchors.shape[1]*parametrize_anchors.shape[2]))
 
-    return positive_anchors
+    #normalisation
+    anchors = (anchors - means)  / std
+
+
+    return anchors
+
+"""
+
+déparametre la pred : directement avec les anchors correspondants
+
+donc shapes (n,4) pas (8000, k, 4)
+
+"""
+def UN_parametrize_predicition(anchors, norm_predictions, means, std):
+
+    norm_predictionsnorm_predictions = norm_predictions*std + means
+
+    x = norm_predictions[:,0] * anchors[:,3] + anchors[:,0]
+    y = norm_predictions[:,1] * anchors[:,2] + anchors[:,1]
+    h = np.exp(norm_predictions[:,2])*anchors[:,2]
+    w = np.exp(norm_predictions[:,3])*anchors[:,3]
+
+    pred = np.array([x,y,h,w]).T
+
+
+
+    return pred
+
 
 
 """
 recupere la ground_truth_bbox a partir des anchors normalisés
+
+osef, juste debug
 """
-def UN_parametrize_anchors(anchors, positive_index, param_anchors):
+def UN_parametrize_anchors_bbox(anchors, param_anchors):
 
-    selected_anchors = anchors[positive_index]          #shape (n pos, 4)
-
-    x = param_anchors[:,0] * selected_anchors[:,3] + selected_anchors[:,0]
-    y = param_anchors[:,1] * selected_anchors[:,2] + selected_anchors[:,1]
-    h = np.power(10,param_anchors[:,2])*selected_anchors[:,2]
-    w = np.power(10,param_anchors[:,3])*selected_anchors[:,3]
+    x = param_anchors[:,0] * anchors[:,3] + anchors[:,0]
+    y = param_anchors[:,1] * anchors[:,2] + anchors[:,1]
+    h = np.exp(param_anchors[:,2])*anchors[:,2]
+    w = np.exp(param_anchors[:,3])*anchors[:,3]
 
     return np.array([x,y,h,w]).T
 
@@ -169,6 +195,8 @@ et on return que ceux qui vont servir au loss
 
 predictions (n,4)
 pred pareil
+
+: on fait pas ça
 
 """
 def parametrize_prediction(target_anchors, predictions):
@@ -182,24 +210,13 @@ def parametrize_prediction(target_anchors, predictions):
 
     x = (predictions[:,0] - target_anchors[:,0])/target_anchors[:,3]
     y = (predictions[:,1] - target_anchors[:,1])/target_anchors[:,2]
-    h = tf.math.log(predictions[:,2]/target_anchors[:,2]) / tf.math.log(10.0)
-    w = tf.math.log(predictions[:,3]/target_anchors[:,3]) / tf.math.log(10.0)
+    h = tf.math.log(predictions[:,2]/target_anchors[:,2])
+    w = tf.math.log(predictions[:,3]/target_anchors[:,3])
 
     normalized_predictions = tf.stack([x,y,h,w],axis=1)
 
     return normalized_predictions
 
-def UN_parametrize_predicition(anchors, positive_index, norm_predictions):
-
-    selected_anchors = anchors[positive_index]          #shape (n pos, 4)
-
-
-    x = norm_predictions[:,0] * selected_anchors[:,3] + selected_anchors[:,0]
-    y = norm_predictions[:,1] * selected_anchors[:,2] + selected_anchors[:,1]
-    h = np.power(10,norm_predictions[:,2])*selected_anchors[:,2]
-    w = np.power(10,norm_predictions[:,3])*selected_anchors[:,3]
-
-    return np.array([x,y,h,w]).T
 
 """
 array 1d de labels, uniquement de la taille du batch, avec
@@ -235,34 +252,7 @@ def generate_reg_labels(anchors, positive_index, ground_truth_bbox):
     return reg_labels
 """
 
-# version return meme shape que pred
-def generate_cls_labels(positive_index, negative_index, anchors_array_shape):
 
-    cls_labels = np.zeros(anchors_array_shape[0:2])
-    cls_labels[positive_index] = 1
-    cls_labels[negative_index] = -1
-
-    cls_labels = cls_labels[np.newaxis, :, :]
-
-    cls_labels = tf.convert_to_tensor(cls_labels)
-
-    return cls_labels
-# version return meme shape que pred
-def generate_reg_labels(anchors, positive_index, ground_truth_bbox):
-    reg_labels = np.zeros(anchors.shape) # (8352,11,4)
-
-    parametrized_positives = parametrize_anchors(anchors,positive_index, ground_truth_bbox)
-    #print("para pos sum ",parametrized_positives)
-
-    reg_labels[positive_index] = parametrized_positives
-
-    reg_labels = np.reshape(reg_labels,(reg_labels.shape[0],reg_labels.shape[1]*reg_labels.shape[2]))
-
-    reg_labels = reg_labels[np.newaxis, :, :]
-
-    reg_labels = tf.convert_to_tensor(reg_labels)
-
-    return reg_labels
 
 
 # -------------------   DEBUG   --------------------

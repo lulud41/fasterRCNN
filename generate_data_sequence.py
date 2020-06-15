@@ -21,7 +21,8 @@ des index positifs et negatifs.
 class Dataset_sequence(tf.keras.utils.Sequence):
 
     def __init__(self, dataset_type,dataset_size, image_shape, anchor_batch_size,
-            ratio_batch,data_path, ground_truth_bbox_path, anchors_array):
+            ratio_batch,data_path, ground_truth_bbox_path, anchors_array,
+            means_anchors=(0,0,0,0), std_anchors=(0.1, 0.1, 0.2, 0.2)):
 
         self.dataset_type = dataset_type
         self.dataset_size = dataset_size
@@ -39,6 +40,9 @@ class Dataset_sequence(tf.keras.utils.Sequence):
         self.data_path = data_path
         self.file_names = self.init_files_names()
 
+        self.means_anchors = means_anchors
+        self.std_anchors = std_anchors
+
     def init_files_names(self):
 
         all_file_names = np.array(glob.glob(self.data_path+"*.pgm"))
@@ -52,7 +56,7 @@ class Dataset_sequence(tf.keras.utils.Sequence):
             return all_file_names[:train_size]
 
         if self.dataset_type == "valid":
-            return all_file_names[train_size:valid_size]
+            return all_file_names[train_size:(train_size+valid_size)]
 
         if self.dataset_type == "test":
             return all_file_names[train_size+valid_size:]
@@ -69,7 +73,7 @@ class Dataset_sequence(tf.keras.utils.Sequence):
             return ground_truth_bbox_list[:train_size]
 
         if self.dataset_type == "valid":
-            return ground_truth_bbox_list[train_size:valid_size]
+            return ground_truth_bbox_list[train_size:train_size+valid_size]
 
         if self.dataset_type == "test":
             return ground_truth_bbox_list[train_size+valid_size:]
@@ -84,8 +88,42 @@ class Dataset_sequence(tf.keras.utils.Sequence):
         image_arr = np.array(image, dtype=np.float32)
         image_arr = image_arr[np.newaxis,:,:,np.newaxis]
 
+        #image_arr = (image_arr - image_arr.mean()) / image_arr.std()
+
         return image_arr
 
+    def generate_cls_labels(self, positive_index, negative_index):
+
+        cls_labels = np.zeros(self.anchors_array.shape[0:2],dtype=np.float32)
+        cls_labels[positive_index] = 1
+        cls_labels[negative_index] = -1
+
+        cls_labels = cls_labels[np.newaxis, :, :]
+        cls_labels = tf.convert_to_tensor(cls_labels)
+
+        return cls_labels
+
+    def generate_reg_labels(self, positive_index, ground_truth_bbox):
+
+        reg_labels = np.zeros(self.anchors_array.shape, dtype=np.float32) # (8352,11,4)
+
+        positive_anchors = self.anchors_array[positive_index]
+
+        parametrized_positives = anchors.parametrize_anchors(positive_anchors, ground_truth_bbox,
+            self.means_anchors, self.std_anchors)
+
+
+        reg_labels[positive_index] = parametrized_positives
+
+        reg_labels = np.reshape(reg_labels,(reg_labels.shape[0],reg_labels.shape[1]*reg_labels.shape[2]))
+
+
+
+        reg_labels = reg_labels[np.newaxis, :, :]
+
+        reg_labels = tf.convert_to_tensor(reg_labels)
+
+        return reg_labels
 
     def __getitem__(self, idx):
 
@@ -93,7 +131,7 @@ class Dataset_sequence(tf.keras.utils.Sequence):
         current_index = idx
 
         while correct_image_found == False:
-
+            #print("curr idx",current_index)
             image = self.load_image(current_index)
 
             positive_anchors_index, negative_anchors_index = anchors.compute_IoU(
@@ -104,9 +142,8 @@ class Dataset_sequence(tf.keras.utils.Sequence):
                 positive_anchors_index, negative_anchors_index = anchors.select_anchors(
                             self.num_positives,self.num_negatives,positive_anchors_index,negative_anchors_index)
 
-                cls_labels = anchors.generate_cls_labels(positive_anchors_index, negative_anchors_index, self.anchors_array.shape)
-                reg_labels = anchors.generate_reg_labels(self.anchors_array, positive_anchors_index,
-                            self.ground_truth_bbox_array[current_index])
+                cls_labels = self.generate_cls_labels(positive_anchors_index, negative_anchors_index)
+                reg_labels = self.generate_reg_labels(positive_anchors_index, self.ground_truth_bbox_array[current_index])
 
                 correct_image_found = True
 

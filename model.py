@@ -23,7 +23,6 @@ class Model_creator():
         self.base_model_name = base_model_name
         self.batch_size = batch_size
 
-
     def base_model(self):
             model_input = tf.keras.Input(shape=self.input_shape)
             conv_1 = tf.keras.layers.Conv2D(32,(3,3),activation='relu',padding='SAME',strides=(1,2))(model_input)
@@ -54,13 +53,18 @@ class Model_creator():
 
         x = base_model.layers[-9].output
 
-        x = tf.keras.layers.Conv2D(512,(3,3),activation="relu",padding="SAME",strides=(1,1),name="conv2d_rpn")(x)
+        #x = conv_plus = tf.keras.layers.Conv2D(256,(3,3),activation='relu',padding='SAME',strides=(1,1))(x)
 
-        cls = tf.keras.layers.Conv2D(self.nb_anchors,(1,1),activation="sigmoid",padding="SAME",strides=(1,1),name="cls_conv")(x)
-        cls = tf.keras.layers.Reshape(target_shape=(self.anchor_array_shape[0],11), name="cls_pred")(cls)
+        x = tf.keras.layers.Conv2D(512,(3,3),activation="relu",padding="SAME",strides=(1,1),name="conv2d_rpn",
+            kernel_initializer="he_uniform")(x)
 
-        reg = tf.keras.layers.Conv2D(self.nb_anchors*4,(1,1),padding="SAME",strides=(1,1),name="reg_conv")(x)
-        reg = tf.keras.layers.Reshape(target_shape=(self.anchor_array_shape[0],44), name="reg_pred")(reg)
+        cls = tf.keras.layers.Conv2D(self.nb_anchors,(1,1),activation="sigmoid",padding="SAME",strides=(1,1),name="cls_conv",
+            kernel_initializer="he_uniform")(x)
+        cls = tf.keras.layers.Reshape(target_shape=(self.anchor_array_shape[0],self.nb_anchors), name="cls_pred")(cls)
+
+        reg = tf.keras.layers.Conv2D(self.nb_anchors*4,(1,1),padding="SAME",strides=(1,1),name="reg_conv",
+            kernel_initializer="he_uniform")(x)
+        reg = tf.keras.layers.Reshape(target_shape=(self.anchor_array_shape[0],self.nb_anchors*4), name="reg_pred")(reg)
 
         model = tf.keras.Model(inputs=model_input, outputs=[cls, reg])
 
@@ -69,8 +73,8 @@ class Model_creator():
     def init_RPN_model(self):
         rpn_model = self.RPN_model()
 
-        optim = tf.keras.optimizers.SGD(learning_rate=self.learning_rate)
-        #optim = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
+        #optim = tf.keras.optimizers.SGD(learning_rate=self.learning_rate)
+        optim = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
 
 
         losses = {"cls_pred":self.cls_loss, "reg_pred":self.reg_loss}
@@ -78,7 +82,10 @@ class Model_creator():
         precision_metric = tf.keras.metrics.Precision(thresholds=0.5)
         metrics = {"cls_pred":["accuracy",precision_metric]} #,  # "reg_pred":reg_loss}
 
+        loss_weights = {"cls_pred":1,"reg_pred":1}
+
         rpn_model.compile(loss=losses,optimizer=optim, metrics=metrics)
+            #loss_weights=loss_weights)
 
         return rpn_model
 
@@ -94,7 +101,7 @@ class Model_creator():
         pos_labels = tf.ones(num_pos_labels)
         neg_labels = tf.zeros(num_neg_labels)
 
-        labels = tf.concat((pos_labels, neg_labels),axis=0)
+        labels = tf.concat((pos_labels, neg_labels), axis=0)
 
         pred = tf.concat((cls_pred[cls_true==1], cls_pred[cls_true==-1]),axis=0)
 
@@ -108,6 +115,7 @@ class Model_creator():
 
     smooth L1 loss
     """
+
     def reg_loss(self,reg_true, reg_pred):
 
         reg_true = tf.reshape(reg_true,(self.batch_size,self.anchor_array_shape[0], self.nb_anchors,4))
@@ -118,17 +126,16 @@ class Model_creator():
 
         un_normalized_target_anchors = tf.reshape(self.anchor_array[reg_true[0] != 0], (-1,4))
 
-        normalized_pred = anchors.parametrize_prediction(un_normalized_target_anchors, pred)
+        #normalized_pred = anchors.parametrize_prediction(un_normalized_target_anchors, pred)
 
-
-        dif = tf.abs(normalized_pred - labels)
+        dif = tf.abs(pred - labels)
         a = dif[dif < 1]
         a = tf.reduce_sum(tf.square(a))*0.5
 
         b = dif[dif >=1]
         b = tf.reduce_sum(b - 0.5)
 
-        loss = a+b
+        loss = (a+b)
 
         return loss
 
