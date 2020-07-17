@@ -22,12 +22,12 @@ IMAGE_SHAPE = (2792,99)  # Images resize en taille ~ moyenne : moyenne pondéré
 INPUT_IMAGE_SHAPE = (99,2792,1) # shape qui rentre dans le cnn
 # même taille pour toutes les parties d'images, présentes en même densité
 
-RATIO_X = 4
-RATIO_Y = 8
+RATIO_X = 2 #4
+RATIO_Y = 4  # 8
 
 BATCH_SIZE = 1
-ANCHOR_BATCH_SIZE = 8  # 4 pos et 4 neg
-ratio_batch = 0.5
+ANCHOR_BATCH_SIZE = 16  # 4 pos et 4 neg
+ratio_batch = 0.3
 
 """anchor_sizes = ((10,20),
                 (20,40),
@@ -53,10 +53,8 @@ anchor_sizes = ((10,20),
 
 DATA_SIZE = int(50)
 
-LEARNING_RATE = 0.00001
+LEARNING_RATE = 0.000001
 NUM_EPOCHS = 200
-
-
 
 
 anchors_array = anchors.generate(INPUT_IMAGE_SHAPE,RATIO_X,RATIO_Y,anchor_sizes)
@@ -69,6 +67,8 @@ valid = generate_data_sequence.Dataset_sequence("valid",DATA_SIZE, IMAGE_SHAPE,A
     ratio_batch, DATA_PATH, GROUND_TRUTH_BBOX_PATH, anchors_array)
 
 
+
+
 model_creator = model.Model_creator(INPUT_IMAGE_SHAPE,anchors_array,LEARNING_RATE,"base_model_galbe.h5",BATCH_SIZE)
 rpn = model_creator.init_RPN_model()
 
@@ -78,6 +78,10 @@ rpn = model_creator.init_RPN_model()
 rpn.summary()
 
 rpn.fit(train_dataset,epochs=NUM_EPOCHS, validation_data=valid   )
+
+
+
+
 
 """
 valid_dataset = generate_data_sequence.Dataset_sequence("valid",DATA_SIZE, IMAGE_SHAPE,ANCHOR_BATCH_SIZE,

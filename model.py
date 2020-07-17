@@ -51,19 +51,19 @@ class Model_creator():
 
         model_input = base_model.input
 
-        x = base_model.layers[-9].output
+        x = base_model.layers[-13].output
 
         #x = conv_plus = tf.keras.layers.Conv2D(256,(3,3),activation='relu',padding='SAME',strides=(1,1))(x)
 
-        x = tf.keras.layers.Conv2D(512,(3,3),activation="relu",padding="SAME",strides=(1,1),name="conv2d_rpn",
-            kernel_initializer="he_uniform")(x)
+        x = tf.keras.layers.Conv2D(256,(3,3),activation="relu",padding="SAME",strides=(1,1),name="conv2d_rpn",
+            kernel_initializer="glorot_uniform")(x)
 
         cls = tf.keras.layers.Conv2D(self.nb_anchors,(1,1),activation="sigmoid",padding="SAME",strides=(1,1),name="cls_conv",
-            kernel_initializer="he_uniform")(x)
+            kernel_initializer="glorot_uniform")(x)
         cls = tf.keras.layers.Reshape(target_shape=(self.anchor_array_shape[0],self.nb_anchors), name="cls_pred")(cls)
 
         reg = tf.keras.layers.Conv2D(self.nb_anchors*4,(1,1),padding="SAME",strides=(1,1),name="reg_conv",
-            kernel_initializer="he_uniform")(x)
+            kernel_initializer="glorot_uniform")(x)
         reg = tf.keras.layers.Reshape(target_shape=(self.anchor_array_shape[0],self.nb_anchors*4), name="reg_pred")(reg)
 
         model = tf.keras.Model(inputs=model_input, outputs=[cls, reg])
@@ -77,7 +77,7 @@ class Model_creator():
         optim = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
 
 
-        losses = {"cls_pred":self.cls_loss, "reg_pred":self.reg_loss}
+        losses = {"cls_pred":self.rpn_cls_loss, "reg_pred":self.rpn_reg_loss}
 
         precision_metric = tf.keras.metrics.Precision(thresholds=0.5)
         metrics = {"cls_pred":["accuracy",precision_metric]} #,  # "reg_pred":reg_loss}
@@ -94,7 +94,7 @@ class Model_creator():
     cls true (1, num pos + num neg)
 
     """
-    def cls_loss(self,cls_true, cls_pred):
+    def rpn_cls_loss(self,cls_true, cls_pred):
         num_pos_labels = tf.reduce_sum(tf.cast(cls_true==1,tf.int32))
         num_neg_labels = tf.reduce_sum(tf.cast(cls_true==-1,tf.int32))
 
@@ -116,7 +116,7 @@ class Model_creator():
     smooth L1 loss
     """
 
-    def reg_loss(self,reg_true, reg_pred):
+    def rpn_reg_loss(self,reg_true, reg_pred):
 
         reg_true = tf.reshape(reg_true,(self.batch_size,self.anchor_array_shape[0], self.nb_anchors,4))
         reg_pred = tf.reshape(reg_pred,(self.batch_size,self.anchor_array_shape[0], self.nb_anchors,4))
@@ -124,7 +124,7 @@ class Model_creator():
         labels = tf.reshape(reg_true[reg_true != 0], (-1,4))
         pred = tf.reshape(reg_pred[reg_true!=0],(-1,4))
 
-        un_normalized_target_anchors = tf.reshape(self.anchor_array[reg_true[0] != 0], (-1,4))
+        #un_normalized_target_anchors = tf.reshape(self.anchor_array[reg_true[0] != 0], (-1,4))
 
         #normalized_pred = anchors.parametrize_prediction(un_normalized_target_anchors, pred)
 

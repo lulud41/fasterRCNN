@@ -87,7 +87,9 @@ def get_bbox_from_mask(img_name):
     bbox_y = top_left_corner[1] + bbox_w//2
 
     return [bbox_x, bbox_y, bbox_h, bbox_w]
-
+"""
+a refaire avec x1x2 y1y2
+"""
 def compute_IoU(anchors, ground_truth_bbox,positive_threshold=0.6, negative_threshold=0.3):
     # anchors : liste d'anchor généres (7562,11,4)
     # ground truth box : mask [x,y,h,w]
